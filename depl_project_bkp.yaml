@@ -1,0 +1,25 @@
+---
+- hosts: all
+  become: true
+
+  tasks:
+  - name: stop running container
+    command: docker stop dockercont
+    ignore_errors: yes
+
+  - name: remove stop container
+    command: docker rm dockercont
+    ignore_errors: yes
+  
+  - name: remove docker image
+    command: docker rmi docky    
+    ignore_errors: yes
+  
+  - name: build docke image using playbook
+    command: docker build -t docky .
+    args:
+       chdir: /opt/docker 
+  
+  - name: crete cont using dokce
+    command: docker run -d --name dockercont -p:8080:8080 docky
+

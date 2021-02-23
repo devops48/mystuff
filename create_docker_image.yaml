@@ -1,0 +1,20 @@
+---
+- hosts: all
+  become: true
+
+  tasks:
+  - name: create dock image through war file
+    command: docker build -t dockerdevops:latest .
+    args:
+       chdir: /opt/docker
+
+  - name: docker tag
+    command: docker tag dockerdevops:latest harsha448/dockerdevops-image
+
+  - name: docker image on dockerhub
+    command: docker push harsha448/dockerdevops-image
+
+  - name: remove docker image
+    command: docker rmi dockerdevops:latest harsha448/dockerdevops-image
+    ignore_errors: yes
+
