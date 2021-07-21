@@ -1,0 +1,245 @@
+# this is location of the base image of Centos 6 in ctg-build-docker repo
+# in ENGIT artifactory.
+
+ARG REPO="dockerhub.cisco.com/ctgbuild-docker/centos/centos6"
+ARG VERSION="centos6.10"
+
+FROM $REPO:$VERSION
+MAINTAINER abgaffar@cisco.com
+USER root
+ENV TZ US/Central
+ENV DOCKER_USER_ID 900711
+ENV DOCKER_USER_GROUP_NAME eng
+ENV DOCKER_USER_GROUP_ID 25
+ENV DOCKER_USER_NAME ccmbuild
+ENV CCMPERL /auto/cmtools/i686-pc-linux-gnu/perl/perl-5.8.8/bin/perl
+
+
+RUN yum update -y && \
+	yum install -y openssh-clients \
+	e2fsprogs-libs \
+	e2fsprogs \
+	e2fsprogs-devel \
+	e2fsprogs-libs.i686 \
+	file \
+	file-libs \
+	file-devel.i686 \
+	file-libs.i686 \
+	file-roller \
+	boost \
+	boost-devel \
+	bzip2-libs.i686 \
+	cracklib.i686 \
+	dbus-glib.i686 \
+	elfutils-libelf.i686 \
+	expat.i686 \
+	expat-devel.i686 \
+	GConf2.i686 \
+	glib2.i686 \
+	glib2-devel \
+	glib2 \
+	libasyncns.i686 \
+	libattr.i686 \
+	libattr-devel.i686 \
+	libblkid.i686 \
+	libcap.i686 \
+	libcap-devel.i686 \
+	libcap-ng \
+	libcap-devel \
+	libcap \
+	libICE.i686 \
+	libogg.i686 \
+	libselinux.i686 \
+	libselinux-devel.i686 \
+	libSM.i686 \
+	libsndfile.i686 \
+	libuuid.i686 \
+	libvorbis.i686 \
+	libXau.i686 \
+	libxcb.i686 \
+	libXext.i686 \
+	libXi.i686 \
+	libXi-devel \
+	libXtst.i686 \
+	ncurses-devel.i686 \
+	ncurses-libs \
+	nspr.i686 \
+	nspr-devel \
+	nspr \
+	pam.i686 \
+	pam-devel.i686 \
+	pcre.i686 \
+	polkit.i686 \
+	pulseaudio-libs.i686 \
+	pulseaudio-libs-devel.i686 \
+	pulseaudio-libs-glib2.i686 \
+	tcp_wrappers-libs.i686 \
+	patch \
+	git-1.7.1-9.el6_9.x86_64 \
+	mpfr \
+	mpfr \
+	rpm-build \
+	glibc-headers \
+	glibc.i686 \
+	glibc-devel.i686 \
+	openssl.i686 \
+	openssl-devel.i686 \
+	tcsh \
+	byacc \
+	flex \
+	libxml2-devel \
+	autoconf-2.63-5.1.el6.noarch \
+	libxslt \
+	libxslt-devel \
+	libxslt \
+	glibc-devel \
+	gcc \
+	gcc-c++ \
+	gcc-gfortran \
+	python-libs \
+	python-devel \
+	bison-2.4.1 \
+	boost-devel \
+	time \
+	coreutils \
+	cups-libs \
+	cups-libs.i686 \
+	bc \
+	fontconfig.i686 \
+	freetype.i686 \
+	automake-1.11.1-4.el6.noarch \
+	libtool \
+	libcurl-devel \
+	mysql \
+	mysql-devel \
+	postgresql-devel \
+	librelp-devel \
+	gnutls-devel \
+	net-snmp-devel \
+	libblkid \
+	libuuid \
+	genisoimage \
+	vim-common \
+	vim-X11 \
+	vim-filesystem \
+	vim-enhanced \
+	cisco-vim-config-1.1-1.noarch \
+	vim-minimal \
+	mailx \
+	krb5-devel.i686 \
+	libcurl.i686 \
+	libcurl \
+	device-mapper-libs \
+	kernel \
+	kernel-headers \
+	kernel-devel \
+	kernel-doc-2.6.32-754.17.1.el6.noarch \
+	kernel-firmware \
+	dracut-kernel-004-411.el6.noarch \
+	tzdata \
+	tzdata-java \
+	gmp \
+	zlib-devel.i686 \
+	zlib-devel \
+	libselinux-ruby \
+	libselinux-python \
+	libselinux-devel \
+	selinux-policy-targeted.noarch \
+	gcc-objc \
+	compat-gcc-34 \
+	compat-gcc-34-c++ \
+	compat-gcc-34-g77 \
+	gcc-gnat \
+	libxml2-python \
+	libxml2-devel \
+	zip \
+	openssl-devel \
+	openssl098e \
+	openssl098e.i686 \
+	docbook-utils \
+	gettext \
+	rpm-libs \
+	rpm-devel \
+	swig \
+	selinux-policy.noarch \
+	expect \
+	expect.i686 \
+        unixODBC \
+        unixODBC.i686 \
+        unixODBC-devel \
+        unixODBC-devel.i686 \
+	gmp-devel \
+	gmp.i686 \
+	gmp-devel.i686 \
+	rpm-libs.i686 \
+	readline-devel.i686 \
+	readline-devel \
+	mutt \
+	sendmail \
+	yum clean all
+
+
+#Create Jenkins user inside container Adding ccmbuild user to ENG group inside the container
+RUN groupadd -g 1000 docker
+RUN groupadd -g 25 eng
+RUN groupadd -g 621 cucm-jenkins
+RUN useradd -u 601 -g 1000 jenkins
+RUN useradd -u 621 -g 621 cucmjenkins
+RUN useradd -u 900711 -g 25 ccmbuild
+	
+#Setup keys to be able to clone component repos during build as ccmbuild
+RUN mkdir -p /home/ccmbuild/.ssh
+RUN chmod 777 /home/ccmbuild/.ssh
+COPY etc/id_rsa /home/ccmbuild/.ssh/
+COPY etc/id_rsa.pub /home/ccmbuild/.ssh/
+COPY etc/known_hosts /home/ccmbuild/.ssh/
+RUN chmod 600 /home/ccmbuild/.ssh/id_rsa; chmod 644 /home/ccmbuild/.ssh/id_rsa.pub; chmod 644 /home/ccmbuild/.ssh/known_hosts
+RUN chown -R ccmbuild /home/ccmbuild/.ssh/id_rsa; chown -R ccmbuild /home/ccmbuild/.ssh/id_rsa.pub; chown -R ccmbuild /home/ccmbuild/.ssh/known_hosts
+
+#Install ovftool
+RUN mkdir /workspace
+COPY scripts/ovftool-4.1.tar.gz /opt/
+RUN cd /opt ; tar -zxvf ovftool-4.1.tar.gz
+RUN ln -s /opt/vmware-ovftool/ovftool /usr/bin/ovftool
+
+#Copy InstallAnywhere
+COPY scripts/InstallAnywhere /.InstallAnywhere
+COPY scripts/system-profile /etc/
+RUN cd / ; 
+
+# ksh binary is varying in base RHEL7 machines, so copying it directly to image and create the soft links
+RUN ln -s /bin/sh /usr/bin/bash
+COPY scripts/ksh93 /bin/
+RUN rm -rf /usr/cisco/
+RUN ln -s /auto/usrcisco-linux-rhel6.0-x86-64 /usr/cisco
+RUN ln -s /auto/usrcisco-noarch /usr/cisco-noarch
+RUN ln -s /usr/cisco/bin/perl5.8 /usr/local/bin/perl5.8
+RUN ln -s /bin/ksh93 /bin/ksh
+
+#Create GIT soft links to work for our Envt
+RUN rm -rf /usr/bin/git
+RUN ln -s /usr/cisco/bin/git /usr/bin/git
+
+#Creating a new limits.d file to avoid fork (resource unavailable error)
+RUN mkdir -p /etc/security/limits.d/
+COPY etc/90-nproc.conf /etc/security/limits.d/90-nproc.conf
+
+
+#Create dir to get rid of error
+RUN mkdir -p /auto/cpi-hard/Platform/Linux/userbuild/
+RUN chmod -R 777 /auto/cpi-hard/Platform/Linux/userbuild/
+COPY scripts/create_user.sh /etc/init.d/
+
+#Untar and stage build script utilities
+COPY scripts/ccmbuild_scripts.tar /
+COPY scripts/ucmap-locutus.tar /
+COPY scripts/ia32.tar /
+COPY scripts/rpms.tar /
+RUN mkdir -p /ws/ccmbuild3/syamala-test/Migration/ /auto/ipcbu-rhel/ /auto/rcbu/sw/thirdparty/intel/ipp/6.1.1.042/ /auto/ipcbu-builds/Published/ /auto/sjc-viewspace/
+RUN cd /ws/ccmbuild3/syamala-test/Migration/ ; tar -xzvf /ccmbuild_scripts.tar
+RUN cd /auto/ipcbu-builds/Published/ ; cp -rpf /ws/ccmbuild3/syamala-test/Migration/ccmbuild_scripts/UserScripts_git /auto/ipcbu-builds/Published/ ; rm -rf /ccmbuild_scripts.tar
+RUN cd /auto/ipcbu-rhel/ ; tar -xzvf /ucmap-locutus.tar ; rm -rf /ucmap-locutus.tar
+RUN cd /auto/rcbu/sw/thirdparty/intel/ipp/6.1.1.042/ ; tar -xzvf /ia32.tar ; rm -rf /ia32.tar
+RUN cd /auto/sjc-viewspace/ ; tar -xzvf /rpms.tar ; rm -rf /rpms.tar
+
+CMD cat /etc/redhat-release
