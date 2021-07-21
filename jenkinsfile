@@ -1,0 +1,160 @@
+ef userbuild_remove_lockdata(userlockfile, repodir) {
+    build job: "clear_ws", 
+        wait: false,
+        parameters: [ 
+        string(name: 'USER_LOCKFILE', value: "${userlockfile}"),
+        string(name: 'REPO_DIR', value: "${repodir}")
+        ]
+}
+def userbuild_lockfile(USER_LOCKFILE)  {
+            def yamlData = readYaml file: "${USER_LOCKFILE}"
+            return yamlData
+}
+
+node(label: "${AGENT_LABEL}")
+{
+    try{
+        withEnv(["JOBURL=${JOB_URL}", "USER_EMAIL=${USER_NAME_ID}@cisco.com", "INFO=**BUILD in PROCESS**:  [<br/>REPO_DIR: ${REPO_DIR}<br/>PRODUCT: ${PRODUCT_NAME}<br/><br/>JOB_LINK: (${env.BUILD_URL})<br/>]", "USER_LOCKFILE=/ws/ccmbuild2/userbuild_lock/${USER_NAME_ID}.lock.yaml", "version=${OS_VERSION}", "USER_BUILDLIMIT=2", "REPO_KEY= repoKeyName(${REPO_DIR})","PASS=**BUILD PASSED**:  [<br/>REPO_DIR: ${REPO_DIR}<br/>PRODUCT: ${PRODUCT_NAME}<br/><br/>JOB_LINK: (${env.BUILD_URL})<br/>]"]) {
+        
+        stage('Check the Lockfile') {
+                    println("Verify and Checking required rules is in process...")
+                    // check params
+                    if ( !params.USER_NAME_ID || !params.USER_ID || !params.USER_GROUP_ID || !params.REPO_DIR || !params.PRODUCT_NAME ) {
+                        ERROR_MSG="BUILD FAILED : Missing required param(s).."
+                        error(ERROR_MSG)
+                    }
+                    println("Required params and args [ OK ]...")
+                    // check lock file
+                    if (fileExists("${USER_LOCKFILE}")) {
+                        println("USER_LOCKFILE [ ${USER_NAME_ID} ] IS FOUND. Proceed on checking lock file...")
+                        // check if workspace exist
+                        def yamlData = userbuild_lockfile("${USER_LOCKFILE}")
+                        def yamlSize = yamlData.size()
+                        def keyData = yamlData["${REPO_KEY}"]
+                        if (keyData) {
+                             println("ERROR: keyData is [ ${keyData} ]. User REPO_DIR: ${REPO_DIR} is currently locked.")
+                             ERROR_MSG="BUILD FAILED : User REPO_DIR: ${REPO_DIR} is currently locked by jenkins build process. ${keyData}"
+                             error(ERROR_MSG)
+                        } else {
+                             println("UserBuild REPO_DIR: ${REPO_DIR} [ IS NOT LOCKED ]. Proceed on checking UserBuild limits...")
+                        }
+                        
+                        // get UserBuild count from lock file
+                        int isize = USER_BUILDLIMIT
+                        if (yamlSize >= isize) {
+                            println("ERROR: UserBuild count is at [ ${yamlSize} ]. UserBuild LIMIT [${USER_BUILDLIMIT}] has been reached.")
+                            yamlData.each { linedata ->
+                                println "UserBuild In Process: ${linedata}"
+                            }
+                            ERROR_MSG="BUILD FAILED : UserBuild LIMIT [${USER_BUILDLIMIT}] has been reached. \
+                            User has reach max concurrent jenkins build request."
+                            error(ERROR_MSG)
+                        } else {
+                            println("UserBuild is within LIMIT MAX of [${USER_BUILDLIMIT}]. Proceed...")
+                        }
+
+                    } else {
+                        println("USER_LOCKFILE [ ${USER_NAME_ID} ] DOES NOT EXIST. Proceed with next stage...")     
+                    }
+        }
+        
+        stage("Set lock"){
+                    // lock file to user workspace
+                    println("Lock is in process...")
+                    def lockContent = ""
+                    if (fileExists("${USER_LOCKFILE}")) {
+                        lockContent = readFile "${USER_LOCKFILE}"
+                    }
+                    println("lockContent is :: ${lockContent}")
+                    def lockmsg = "\"${REPO_KEY}\": \"${REPO_DIR}^^${BUILD_URL}\"\r\n"
+                    writeFile file: "${USER_LOCKFILE}", text: lockContent+"${lockmsg}", encoding: "UTF-8"
+        }
+        
+        stage ("Send Build Start message"){
+        		withCredentials([string(credentialsId: 'ctg-build-bot', variable: 'BOT_TOKEN')]) {
+                //sh 'curl -X POST -H "Authorization: Bearer "${BOT_TOKEN}"" -H "Content-type: application/json" https://api.ciscospark.com/v1/messages -d "{"toPersonEmail":"${USER_EMAIL}", "markdown":"${INFO}"}"'
+                sh """
+                curl -X POST -H "Authorization: Bearer ${BOT_TOKEN}" -H 'Content-type: application/json' https://api.ciscospark.com/v1/messages -d '{"toPersonEmail":"'"${USER_EMAIL}"'", "markdown":"'"${INFO}"'"}'
+                """
+                }
+        }
+		if (env.version == 'RHEL6'){
+		myImage = docker.image("dockerhub.cisco.com/ctgbuild-docker/centos/centos6/user_build:latest")
+        stage ("User Build") {
+                myImage.inside(
+                "-u root -e DOCKER_USER_NAME=${USER_NAME_ID} \
+                -e DOCKER_USER_ID=${USER_ID} -e DOCKER_USER_GROUP_NAME=eng -e DOCKER_USER_GROUP_ID=${USER_GROUP_ID} \
+				-v /auto/cmtools/:/auto/cmtools/ -v /auto/ipcbu-tpl:/auto/ipcbu-tpl -v /auto/cpi/Platform/:/auto/cpi/Platform/ \
+				-v /auto/eda_depot/:/auto/eda_depot/ -v /auto/edatools/:/auto/edatools/ -v /auto/usrcisco-noarch:/auto/usrcisco-noarch \
+				-v /auto/usrcisco-linux-rhel6.0-x86-64/:/auto/usrcisco-linux-rhel6.0-x86-64/ -v /auto/catch/:/auto/catch/ \
+				-v /users/${USER_NAME_ID}/:/home/${USER_NAME_ID}/ -v /auto/andatc/linux/wr-x86/3.0FCS/:/auto/andatc/linux/wr-x86/3.0FCS/ \
+				-v /auto/andpkg/rep_cache/wr-x86/3.0FCS/:/auto/andpkg/rep_cache/wr-x86/3.0FCS/ -v /auto/ipcbu-builds2-published:/auto/ipcbu-builds2-published \
+				-v /auto/UCBUTools/:/auto/UCBUTools/ -v /auto/ucbu-ccmlibs/:/auto/ucbu-ccmlibs/ -v /auto/xcp/:/auto/xcp/ \
+			    -v /auto/irelease/:/auto/irelease/ -v /auto/ccm-ks:/auto/ccm-ks \
+				-v ${REPO_DIR}:${REPO_DIR} \
+				-v /var/run/docker.sock:/var/run/docker.sock --entrypoint '' ") { 
+                sh """
+                    set +x
+                    hostname
+                    whoami
+                    /etc/init.d/create_user.sh;su ${USER_NAME_ID} -c "set -e;id;whoami;cd ${REPO_DIR}/${PRODUCT_NAME};ls;source ./setenv.sh;set +e;build${PRODUCT_NAME}_git ${BUILD_ARGS}"
+                    set -x
+                 """
+				}
+			}
+		} else {
+		myImage = docker.image("dockerhub.cisco.com/ctgbuild-docker/centos7.6.1810-cucm-usrbld")
+		stage ("User Build") {
+                myImage.inside(
+				"-u root -w /tmp -e TZ=US/Central -e DOCKER_USER_NAME=${USER_NAME_ID} \
+                    -e DOCKER_USER_ID=${USER_ID} -e DOCKER_USER_GROUP_NAME=${USER_NAME_ID} -e DOCKER_USER_GROUP_ID=${USER_GROUP_ID} \
+                    -e CCMPERL=/auto/cmtools/i686-pc-linux-gnu/perl/perl-5.8.8/bin/perl \
+                    -v /users/${USER_NAME_ID}:/home/${USER_NAME_ID} \
+                    -v /auto/ipcbu-builds/Published:/auto/ipcbu-builds/Published -v /usr/cisco:/usr/cisco \
+                    -v /ws/ccmbuild2:/ws/ccmbuild2 -v /auto/cpi-hard:/auto/cpi-hard -v /auto/cmtools:/auto/cmtools \
+                    -v /auto/edatools:/auto/edatools -v /auto/eda_depot:/auto/eda_depot \
+                    -v /auto/usrcisco-noarch:/auto/usrcisco-noarch \
+                    -v /auto/usrcisco-linux-rhel7.0-x86-64:/auto/usrcisco-linux-rhel7.0-x86-64 \
+                    -v /auto/ipcbu-builds2-published:/auto/ipcbu-builds2-published \
+                    -v ${REPO_DIR}:${REPO_DIR} \
+                    -v /var/run/docker.sock:/var/run/docker.sock --entrypoint '' --network host") { 
+                sh """
+                    set +x
+                    hostname
+                    whoami
+                    dinit -c -s /etc/dinit su ${USER_NAME_ID} -c "set -e;id;whoami;cd ${REPO_DIR}/${PRODUCT_NAME};ls;source ./setenv.sh;set +e;build${PRODUCT_NAME}_git ${BUILD_ARGS}"
+                    set -x
+                 """
+				}
+			}
+		}
+			
+				withCredentials([string(credentialsId: 'ctg-build-bot', variable: 'BOT_TOKEN')]) {
+					sh """
+						curl -X POST -H "Authorization: Bearer ${BOT_TOKEN}" -H 'Content-type: application/json' https://api.ciscospark.com/v1/messages -d '{"toPersonEmail":"'"${USER_EMAIL}"'", "markdown":"'"${PASS}"'"}'
+					"""
+                }
+                currentBuild.result = 'SUCCESS'
+			}
+		
+    } catch (error) {
+        withEnv(["JOBURL=${JOB_URL}", "USER_EMAIL=${USER_NAME_ID}@cisco.com", "FAIL=**BUILD FAILED**:  [<br/>REPO_DIR: ${REPO_DIR}<br/>PRODUCT: ${PRODUCT_NAME}<br/>JOB_LINK: (${env.BUILD_URL})</br>"]){
+                withCredentials([string(credentialsId: 'ctg-build-bot', variable: 'BOT_TOKEN')]) {
+					sh """
+						curl -X POST -H "Authorization: Bearer ${BOT_TOKEN}" -H 'Content-type: application/json' https://api.ciscospark.com/v1/messages -d '{"toPersonEmail":"'"${USER_EMAIL}"'", "markdown":"'"${FAIL}"'"}'
+					"""
+                }
+                currentBuild.result = 'FAILURE'
+            }            
+    } finally { 
+            withEnv(["JOBURL=${JOB_URL}", "USER_LOCKFILE=/ws/ccmbuild2/userbuild_lock/${USER_NAME_ID}.lock.yaml"]) {
+			    // create lock if does not exit
+                if (!fileExists("${USER_LOCKFILE}")) {
+                    writeFile file: "${USER_LOCKFILE}", text: "", encoding: "UTF-8"
+                }
+
+                userbuild_remove_lockdata("${USER_LOCKFILE}", "${REPO_DIR}")
+            }
+	}
+	echo "RESULT: ${currentBuild.result}"
+}
